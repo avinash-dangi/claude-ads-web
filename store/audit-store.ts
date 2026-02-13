@@ -34,6 +34,8 @@ export const useAuditStore = create<AuditStore>((set) => ({
       formData: {
         ...state.formData,
         businessInfo: {
+          name: state.formData.businessInfo?.name || '',
+          type: state.formData.businessInfo?.type || 'generic',
           ...state.formData.businessInfo,
           ...info,
         },
