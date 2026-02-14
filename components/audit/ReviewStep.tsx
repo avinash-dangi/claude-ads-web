@@ -4,7 +4,9 @@ import { useAuditStore } from '@/store/audit-store';
 import { BUSINESS_TYPES, PLATFORM_INFO, Platform } from '@/types/business';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, AlertCircle, CheckCircle, AlertTriangle, Download } from 'lucide-react';
+import { exportResponsesAsJSON, exportResponsesAsCSV } from '@/lib/utils/response-export';
 
 export default function ReviewStep() {
   const { formData, getAuditResponses } = useAuditStore();
@@ -26,6 +28,20 @@ export default function ReviewStep() {
       notApplicable: responses.filter((r) => r.status === 'not-applicable').length,
     };
     return stats;
+  };
+
+  const handleExportAllResponses = (format: 'json' | 'csv') => {
+    const companyName = formData.businessInfo?.name || 'Audit';
+    selectedPlatforms.forEach((platform) => {
+      const responses = getAuditResponses(platform as Platform);
+      if (responses.length > 0) {
+        if (format === 'json') {
+          exportResponsesAsJSON(platform as Platform, companyName, responses);
+        } else {
+          exportResponsesAsCSV(platform as Platform, companyName, responses);
+        }
+      }
+    });
   };
 
   return (
@@ -82,6 +98,40 @@ export default function ReviewStep() {
               <span className="font-medium">{formData.businessInfo.primaryGoal}</span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Export Options */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>Export Responses</span>
+            <Badge variant="secondary">Optional</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-slate-600">
+            Download all your audit responses before generating the final report. Your responses will also be saved
+            with the report.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => handleExportAllResponses('json')}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export as JSON
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleExportAllResponses('csv')}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export as CSV
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuditStore } from '@/store/audit-store';
 import { Platform } from '@/types/business';
 import { AuditCheck, CheckStatus } from '@/types/audit';
@@ -14,7 +14,10 @@ import {
   RadioGroupItem,
 } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertCircle, CheckCircle, AlertTriangle, Download } from 'lucide-react';
+import QuestionnaireHeader from './QuestionnaireHeader';
+import ResponseValidator from './ResponseValidator';
+import { estimateTimeRemaining, exportResponsesAsJSON, exportResponsesAsCSV } from '@/lib/utils/response-export';
 
 interface QuestionnaireStepProps {
   platform: Platform;
@@ -124,20 +127,39 @@ export default function QuestionnaireStep({
     }
   };
 
+  const timeRemaining = estimateTimeRemaining(currentCheckIndex, checks.length);
+
+  const handleExportJSON = () => {
+    const exportData = Array.from(responses.values()).map((value, index) => ({
+      checkId: Array.from(responses.keys())[index],
+      status: value.status,
+      notes: value.notes,
+    }));
+    exportResponsesAsJSON(platform, 'Audit Responses', exportData as any);
+  };
+
+  const handleExportCSV = () => {
+    const exportData = Array.from(responses.values()).map((value, index) => ({
+      checkId: Array.from(responses.keys())[index],
+      status: value.status,
+      notes: value.notes,
+    }));
+    exportResponsesAsCSV(platform, 'Audit Responses', exportData as any);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header with progress */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-lg">
-            Question {currentCheckIndex + 1} of {checks.length}
-          </h3>
-          <span className="text-sm text-slate-600">
-            {totalAnswered} answered
-          </span>
-        </div>
-        <Progress value={progress} className="h-2" />
-      </div>
+      {/* Enhanced Header */}
+      <QuestionnaireHeader
+        platform={platform}
+        currentCheckIndex={currentCheckIndex}
+        totalChecks={checks.length}
+        responses={responses}
+        estimatedTimeRemaining={timeRemaining}
+      />
+
+      {/* Response Validator */}
+      <ResponseValidator checks={checks} responses={responses} />
 
       {/* Check details */}
       <Card className="p-6 border-l-4" style={{ borderLeftColor: getSeverityColor(currentCheck.severity).split(' ')[0].replace('bg-', '#') }}>
@@ -241,7 +263,7 @@ export default function QuestionnaireStep({
       </div>
 
       {/* Navigation */}
-      <div className="flex justify-between pt-4 border-t">
+      <div className="flex justify-between items-center pt-4 border-t">
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -258,6 +280,30 @@ export default function QuestionnaireStep({
             className="gap-2"
           >
             Cancel
+          </Button>
+        </div>
+
+        <div className="flex gap-2">
+          {/* Export Buttons */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleExportJSON}
+            title="Export responses as JSON"
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            JSON
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleExportCSV}
+            title="Export responses as CSV"
+            className="gap-2"
+          >
+            <Download className="w-4 h-4" />
+            CSV
           </Button>
         </div>
 
