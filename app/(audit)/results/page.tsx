@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuditStore } from '@/store/audit-store';
-import { generateMockMultiPlatformReport } from '@/lib/utils/mock-audit-data';
+import { generateAuditReport, isQuestionnaireComplete } from '@/lib/utils/results-service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,27 +17,58 @@ import {
   Zap,
   Target,
   BarChart3,
+  AlertCircle,
 } from 'lucide-react';
 import ScoreCard from '@/components/audit/results/ScoreCard';
 import FindingsList from '@/components/audit/results/FindingsList';
 import ActionPlan from '@/components/audit/results/ActionPlan';
 import QuickWins from '@/components/audit/results/QuickWins';
 import CategoryBreakdown from '@/components/audit/results/CategoryBreakdown';
+import type { MultiPlatformAudit } from '@/types/audit';
 
 export default function ResultsPage() {
-  const auditStore = useAuditStore();
-  const [report, setReport] = useState<ReturnType<typeof generateMockMultiPlatformReport> | null>(null);
+  const router = useRouter();
+  const { formData, auditResponses } = useAuditStore();
+  const selectedPlatforms = formData.selectedPlatforms || [];
+  const [report, setReport] = useState<MultiPlatformAudit | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // For now, use mock data as a fallback
-    // In the future, this will calculate scores from auditStore.auditResponses
-    const mockReport = generateMockMultiPlatformReport();
-    setReport(mockReport);
-    setLoading(false);
-  }, [auditStore]);
+    try {
+      // Check if user came here without completing questionnaire
+      if (!selectedPlatforms || selectedPlatforms.length === 0) {
+        setError('No platforms selected. Please start the audit form again.');
+        setLoading(false);
+        return;
+      }
 
-  if (loading || !report) {
+      // Check if questionnaire is complete
+      const isComplete = isQuestionnaireComplete(selectedPlatforms, auditResponses);
+      if (!isComplete) {
+        setError('Questionnaire not completed for all platforms. Please complete the audit form.');
+        setLoading(false);
+        return;
+      }
+
+      // Generate report from real responses
+      const generatedReport = generateAuditReport({
+        formData: formData || {},
+        auditResponses,
+        selectedPlatforms,
+      });
+
+      setReport(generatedReport);
+      setError(null);
+    } catch (err) {
+      console.error('Error generating report:', err);
+      setError('Failed to generate report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [formData, auditResponses]);
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-12">
         <div className="container mx-auto px-4 max-w-7xl text-center py-20">
@@ -49,11 +81,44 @@ export default function ResultsPage() {
     );
   }
 
-  const platformReport = report!.platformReports[0]; // Currently showing Google Ads only
+  if (error || !report) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-12">
+        <div className="container mx-auto px-4 max-w-7xl">
+          <Card className="bg-red-50 border-red-200 mb-8">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-4">
+                <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-red-900 mb-2">Unable to Generate Report</h3>
+                  <p className="text-red-800 mb-4">{error || 'Unknown error occurred'}</p>
+                  <Button onClick={() => router.push('/audit')} variant="outline">
+                    Return to Audit Form
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Aggregate metrics across all platforms
+  const aggregatedMetrics = {
+    passing: report.platformReports.reduce((sum, p) => sum + p.results.filter((r) => r.status === 'pass').length, 0),
+    warnings: report.platformReports.reduce((sum, p) => sum + p.results.filter((r) => r.status === 'warning').length, 0),
+    critical: report.platformReports.reduce((sum, p) => sum + p.findings.critical, 0),
+    totalChecks: report.platformReports.reduce((sum, p) => sum + p.results.length, 0),
+  };
 
   const handleExportPDF = () => {
     // TODO: Implement PDF export
     alert('PDF export coming soon!');
+  };
+
+  const handleBackToAudit = () => {
+    router.push('/audit');
   };
 
   return (
@@ -65,7 +130,9 @@ export default function ResultsPage() {
             <div>
               <h1 className="text-4xl font-bold mb-2">Your Audit Report</h1>
               <p className="text-slate-600">
-                Comprehensive analysis of your advertising accounts
+                {report.platformReports.length === 1
+                  ? `Comprehensive analysis of your ${report.platformReports[0].platform}`
+                  : `Comprehensive analysis of ${report.platformReports.length} advertising platforms`}
               </p>
             </div>
             <Button onClick={handleExportPDF} className="gap-2">
@@ -90,7 +157,12 @@ export default function ResultsPage() {
         <ScoreCard
           score={report.overallScore}
           grade={report.overallGrade}
-          findings={platformReport.findings}
+          findings={{
+            critical: aggregatedMetrics.critical,
+            high: report.platformReports.reduce((sum, p) => sum + p.findings.high, 0),
+            medium: report.platformReports.reduce((sum, p) => sum + p.findings.medium, 0),
+            low: report.platformReports.reduce((sum, p) => sum + p.findings.low, 0),
+          }}
         />
 
         {/* Key Metrics */}
@@ -102,9 +174,7 @@ export default function ResultsPage() {
                   <CheckCircle2 className="w-6 h-6 text-green-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">
-                    {platformReport.results.filter((r: any) => r.status === 'pass').length}
-                  </div>
+                  <div className="text-2xl font-bold">{aggregatedMetrics.passing}</div>
                   <div className="text-sm text-slate-600">Passing Checks</div>
                 </div>
               </div>
@@ -118,9 +188,7 @@ export default function ResultsPage() {
                   <AlertTriangle className="w-6 h-6 text-yellow-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">
-                    {platformReport.results.filter((r: any) => r.status === 'warning').length}
-                  </div>
+                  <div className="text-2xl font-bold">{aggregatedMetrics.warnings}</div>
                   <div className="text-sm text-slate-600">Warnings</div>
                 </div>
               </div>
@@ -134,9 +202,7 @@ export default function ResultsPage() {
                   <XCircle className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">
-                    {platformReport.findings.critical + platformReport.findings.high}
-                  </div>
+                  <div className="text-2xl font-bold">{aggregatedMetrics.critical}</div>
                   <div className="text-sm text-slate-600">Critical Issues</div>
                 </div>
               </div>
@@ -150,7 +216,7 @@ export default function ResultsPage() {
                   <BarChart3 className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{platformReport.results.length}</div>
+                  <div className="text-2xl font-bold">{aggregatedMetrics.totalChecks}</div>
                   <div className="text-sm text-slate-600">Total Checks</div>
                 </div>
               </div>
@@ -158,71 +224,145 @@ export default function ResultsPage() {
           </Card>
         </div>
 
-        {/* Quick Wins */}
-        {platformReport.quickWins.length > 0 && (
-          <QuickWins quickWins={platformReport.quickWins} />
+        {/* Platform Selection Tabs (if multiple platforms) */}
+        {report.platformReports.length > 1 && (
+          <Tabs defaultValue={report.platformReports[0].platform} className="mb-8">
+            <TabsList className="grid w-full mb-4" style={{ gridTemplateColumns: `repeat(${Math.min(report.platformReports.length, 4)}, minmax(0, 1fr))` }}>
+              {report.platformReports.map((p) => (
+                <TabsTrigger key={p.platform} value={p.platform}>
+                  {p.platform.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            {report.platformReports.map((p) => (
+              <TabsContent key={p.platform} value={p.platform}>
+                <div className="space-y-8">
+                  {/* Platform Quick Wins */}
+                  {p.quickWins.length > 0 && (
+                    <QuickWins quickWins={p.quickWins} />
+                  )}
+
+                  {/* Platform Tabs */}
+                  <Tabs defaultValue="action-plan" className="mb-0">
+                    <TabsList className="grid w-full grid-cols-3 mb-8">
+                      <TabsTrigger value="action-plan" className="gap-2">
+                        <Target className="w-4 h-4" />
+                        Action Plan
+                      </TabsTrigger>
+                      <TabsTrigger value="findings" className="gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        Findings
+                      </TabsTrigger>
+                      <TabsTrigger value="recommendations" className="gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Top Recs
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="action-plan">
+                      <ActionPlan actionPlan={report.actionPlan.filter((item) => item.platform === p.platform)} />
+                    </TabsContent>
+
+                    <TabsContent value="findings">
+                      <FindingsList report={p} />
+                    </TabsContent>
+
+                    <TabsContent value="recommendations">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Top Recommendations</CardTitle>
+                          <CardDescription>
+                            Prioritized improvements for {p.platform}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {p.recommendations.slice(0, 5).map((rec, index) => (
+                              <div key={index} className="flex gap-3 p-4 bg-slate-50 rounded-lg">
+                                <div className="flex-shrink-0">
+                                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                                    {index + 1}
+                                  </div>
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm">{rec}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
         )}
 
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="action-plan" className="mb-8">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
-            <TabsTrigger value="action-plan" className="gap-2">
-              <Target className="w-4 h-4" />
-              Action Plan
-            </TabsTrigger>
-            <TabsTrigger value="findings" className="gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              Findings
-            </TabsTrigger>
-            <TabsTrigger value="categories" className="gap-2">
-              <BarChart3 className="w-4 h-4" />
-              By Category
-            </TabsTrigger>
-            <TabsTrigger value="recommendations" className="gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Recommendations
-            </TabsTrigger>
-          </TabsList>
+        {/* Single Platform View */}
+        {report.platformReports.length === 1 && (
+          <div className="space-y-8">
+            {/* Quick Wins */}
+            {report.platformReports[0].quickWins.length > 0 && (
+              <QuickWins quickWins={report.platformReports[0].quickWins} />
+            )}
 
-          <TabsContent value="action-plan">
-            <ActionPlan actionPlan={report.actionPlan} />
-          </TabsContent>
+            {/* Main Content Tabs */}
+            <Tabs defaultValue="action-plan" className="mb-8">
+              <TabsList className="grid w-full grid-cols-3 mb-8">
+                <TabsTrigger value="action-plan" className="gap-2">
+                  <Target className="w-4 h-4" />
+                  Action Plan
+                </TabsTrigger>
+                <TabsTrigger value="findings" className="gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Findings
+                </TabsTrigger>
+                <TabsTrigger value="recommendations" className="gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  Recommendations
+                </TabsTrigger>
+              </TabsList>
 
-          <TabsContent value="findings">
-            <FindingsList report={platformReport} />
-          </TabsContent>
+              <TabsContent value="action-plan">
+                <ActionPlan actionPlan={report.actionPlan} />
+              </TabsContent>
 
-          <TabsContent value="categories">
-            <CategoryBreakdown report={platformReport} />
-          </TabsContent>
+              <TabsContent value="findings">
+                <FindingsList report={report.platformReports[0]} />
+              </TabsContent>
 
-          <TabsContent value="recommendations">
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Recommendations</CardTitle>
-                <CardDescription>
-                  Prioritized improvements based on your audit results
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {platformReport.recommendations.slice(0, 10).map((rec, index) => (
-                    <div key={index} className="flex gap-3 p-4 bg-slate-50 rounded-lg">
-                      <div className="flex-shrink-0">
-                        <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">
-                          {index + 1}
+              <TabsContent value="recommendations">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top Recommendations</CardTitle>
+                    <CardDescription>
+                      Prioritized improvements based on your audit results
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {report.platformReports[0].recommendations.slice(0, 10).map((rec, index) => (
+                        <div key={index} className="flex gap-3 p-4 bg-slate-50 rounded-lg">
+                          <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                              {index + 1}
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm">{rec}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm">{rec}</p>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
 
         {/* CTA Section */}
         <Card className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white">
