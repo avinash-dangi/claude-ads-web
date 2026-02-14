@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuditStore } from '@/store/audit-store';
 import { generateMockMultiPlatformReport } from '@/lib/utils/mock-audit-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,8 +24,32 @@ import QuickWins from '@/components/audit/results/QuickWins';
 import CategoryBreakdown from '@/components/audit/results/CategoryBreakdown';
 
 export default function ResultsPage() {
-  const [report] = useState(() => generateMockMultiPlatformReport());
-  const platformReport = report.platformReports[0]; // Currently showing Google Ads only
+  const auditStore = useAuditStore();
+  const [report, setReport] = useState<ReturnType<typeof generateMockMultiPlatformReport> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // For now, use mock data as a fallback
+    // In the future, this will calculate scores from auditStore.auditResponses
+    const mockReport = generateMockMultiPlatformReport();
+    setReport(mockReport);
+    setLoading(false);
+  }, [auditStore]);
+
+  if (loading || !report) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-12">
+        <div className="container mx-auto px-4 max-w-7xl text-center py-20">
+          <div className="inline-block">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+          <p className="mt-4 text-slate-600">Calculating your audit report...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const platformReport = report!.platformReports[0]; // Currently showing Google Ads only
 
   const handleExportPDF = () => {
     // TODO: Implement PDF export
@@ -78,7 +103,7 @@ export default function ResultsPage() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold">
-                    {platformReport.results.filter((r) => r.status === 'pass').length}
+                    {platformReport.results.filter((r: any) => r.status === 'pass').length}
                   </div>
                   <div className="text-sm text-slate-600">Passing Checks</div>
                 </div>
@@ -94,7 +119,7 @@ export default function ResultsPage() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold">
-                    {platformReport.results.filter((r) => r.status === 'warning').length}
+                    {platformReport.results.filter((r: any) => r.status === 'warning').length}
                   </div>
                   <div className="text-sm text-slate-600">Warnings</div>
                 </div>

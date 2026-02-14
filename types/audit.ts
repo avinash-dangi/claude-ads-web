@@ -69,11 +69,60 @@ export interface MultiPlatformAudit {
   }>;
 }
 
+export interface Finding {
+  id: string;
+  checkId: string;
+  category: string;
+  title: string;
+  severity: Severity;
+  status: CheckStatus;
+  currentState: string;
+  targetState: string;
+  reason: string;
+  impact: string;
+  effort: 'low' | 'medium' | 'high';
+  recommendation: string;
+  checkDescription?: string;
+}
+
+export interface QuickWin {
+  id: string;
+  title: string;
+  description: string;
+  estimatedImpact: string;
+  effort: 'low' | 'medium';
+  category: string;
+  checkIds: string[];
+}
+
+export interface ActionItem {
+  priority: number;
+  title: string;
+  description: string;
+  category: string;
+  severity: Severity;
+  estimatedEffort: 'low' | 'medium' | 'high';
+  expectedImpact: string;
+  checklist: string[];
+  dependencies?: number[]; // Priority numbers of dependent items
+}
+
+export interface CategoryScore {
+  name: string;
+  weight: number;
+  totalChecks: number;
+  passedChecks: number;
+  warningChecks: number;
+  failedChecks: number;
+  score: number;
+  percentage: number;
+}
+
 export const SEVERITY_WEIGHTS = {
-  critical: 1.0,
-  high: 0.7,
-  medium: 0.4,
-  low: 0.2,
+  critical: 5.0,
+  high: 3.0,
+  medium: 1.5,
+  low: 0.5,
 } as const;
 
 export const GRADE_THRESHOLDS = {

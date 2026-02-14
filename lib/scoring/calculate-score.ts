@@ -2,62 +2,71 @@ import {
   AuditResult,
   AuditReport,
   PlatformAudit,
-  CheckStatus,
+  MultiPlatformAudit,
   SEVERITY_WEIGHTS,
-  GRADE_THRESHOLDS,
 } from '@/types/audit';
+import {
+  calculateCategoryScore,
+  calculatePlatformHealthScore,
+  scoreToGrade,
+  getGradeColor,
+  getGradeBgColor,
+  getSeverityColor,
+  countFindingsBySeverity,
+} from './scoring-algorithms';
 
+/**
+ * Calculate the overall score for a platform audit
+ * Uses new algorithm with category-based weighting
+ */
 export function calculatePlatformScore(
   platformAudit: PlatformAudit,
   results: AuditResult[]
 ): AuditReport {
-  let totalScore = 0;
-  let maxScore = 0;
-  const findings = {
-    critical: 0,
-    high: 0,
-    medium: 0,
-    low: 0,
-  };
-  const recommendations: string[] = [];
-  const quickWins: string[] = [];
+  // Calculate scores for each category
+  const categoryScores = [];
 
-  // Calculate weighted scores
-  for (const result of results) {
-    const check = platformAudit.checks.find((c) => c.id === result.checkId);
-    if (!check || result.status === 'not-applicable') continue;
+  for (const category of platformAudit.categories) {
+    const categoryResults = [];
 
-    const severityWeight = SEVERITY_WEIGHTS[check.severity];
-    const category = platformAudit.categories.find((cat) => cat.name === check.category);
-    const categoryWeight = category?.weight || 0;
-
-    maxScore += severityWeight * categoryWeight * 100;
-
-    // Score based on status
-    let checkScore = 0;
-    if (result.status === 'pass') {
-      checkScore = severityWeight * categoryWeight * 100;
-    } else if (result.status === 'warning') {
-      checkScore = severityWeight * categoryWeight * 50; // 50% credit for warnings
-    } else if (result.status === 'fail') {
-      checkScore = 0;
-      findings[check.severity]++;
-
-      // Add to recommendations
-      recommendations.push(`[${check.severity.toUpperCase()}] ${check.check}: ${check.fail}`);
-
-      // Quick wins are medium/low severity items
-      if (check.severity === 'medium' || check.severity === 'low') {
-        quickWins.push(check.check);
+    // Collect results for this category
+    for (const check of platformAudit.checks) {
+      if (check.category === category.name) {
+        const result = results.find((r) => r.checkId === check.id);
+        if (result) {
+          categoryResults.push({ check, result });
+        }
       }
     }
 
-    totalScore += checkScore;
+    // Calculate category score
+    if (categoryResults.length > 0) {
+      const score = calculateCategoryScore(categoryResults, category);
+      categoryScores.push(score);
+    }
   }
 
-  // Normalize to 0-100 scale
-  const score = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-  const grade = getGrade(score);
+  // Calculate overall health score from categories
+  const overallScore = calculatePlatformHealthScore(categoryScores);
+  const grade = scoreToGrade(overallScore);
+
+  // Count findings by severity
+  const findings = countFindingsBySeverity(results, platformAudit.checks);
+
+  // Create recommendations from failed checks
+  const recommendations: string[] = [];
+  const failedResults = results.filter((r) => r.status === 'fail' || r.status === 'warning');
+
+  for (const result of failedResults) {
+    const check = platformAudit.checks.find((c) => c.id === result.checkId);
+    if (check) {
+      const text =
+        result.status === 'fail'
+          ? `[${check.severity.toUpperCase()}] ${check.check}: ${check.fail}`
+          : `[${check.severity.toUpperCase()}] ${check.check}: ${check.warning}`;
+      recommendations.push(text);
+    }
+  }
 
   // Sort recommendations by severity
   recommendations.sort((a, b) => {
@@ -67,71 +76,105 @@ export function calculatePlatformScore(
     return (severityOrder[severityA] || 999) - (severityOrder[severityB] || 999);
   });
 
+  // Identify quick wins (low-effort, high-impact items)
+  const quickWins: string[] = [];
+  for (const check of platformAudit.checks) {
+    const result = results.find((r) => r.checkId === check.id);
+    if (
+      result &&
+      (result.status === 'fail' || result.status === 'warning') &&
+      (check.severity === 'medium' || check.severity === 'low')
+    ) {
+      quickWins.push(check.check);
+    }
+  }
+
   return {
     platform: platformAudit.platform,
     date: new Date(),
     results,
-    score,
+    score: overallScore,
     grade,
-    findings,
-    recommendations: recommendations.slice(0, 10), // Top 10
-    quickWins: quickWins.slice(0, 5), // Top 5 quick wins
+    findings: findings as any,
+    recommendations: recommendations.slice(0, 10),
+    quickWins: quickWins.slice(0, 5),
   };
 }
 
-export function getGrade(score: number): string {
-  if (score >= GRADE_THRESHOLDS.A) return 'A';
-  if (score >= GRADE_THRESHOLDS.B) return 'B';
-  if (score >= GRADE_THRESHOLDS.C) return 'C';
-  if (score >= GRADE_THRESHOLDS.D) return 'D';
-  return 'F';
+/**
+ * Calculate scores for multiple platforms
+ * Returns combined report with overall metrics
+ */
+export function calculateMultiPlatformScore(
+  platformAudits: Map<string, PlatformAudit>,
+  platformResults: Map<string, AuditResult[]>
+): MultiPlatformAudit {
+  const platformReports = [];
+  let overallScore = 0;
+  let platformCount = 0;
+
+  // Calculate report for each platform
+  for (const [platform, audit] of platformAudits) {
+    const results = platformResults.get(platform) || [];
+    const report = calculatePlatformScore(audit, results);
+    platformReports.push(report);
+    overallScore += report.score;
+    platformCount++;
+  }
+
+  // Calculate average overall score
+  overallScore = platformCount > 0 ? Math.round(overallScore / platformCount) : 0;
+  const overallGrade = scoreToGrade(overallScore);
+
+  // Collect top issues across all platforms
+  const topIssues = [];
+  for (const report of platformReports) {
+    for (const result of report.results) {
+      if (result.status === 'fail' || result.status === 'warning') {
+        const check = report.results
+          .map((r) => r.checkId)
+          .indexOf(result.checkId);
+        if (check >= 0) {
+          const severity = result.status === 'fail' ? 'critical' : 'high';
+          topIssues.push({
+            platform: report.platform,
+            checkId: result.checkId,
+            issue: `Check: ${result.checkId}`,
+            priority: severity as any,
+          });
+        }
+      }
+    }
+  }
+
+  // Limit to top 5 issues
+  topIssues.slice(0, 5);
+
+  // Create action plan
+  const actionPlan = [];
+  let priority = 1;
+
+  for (const report of platformReports) {
+    const failedCount = report.results.filter((r) => r.status === 'fail').length;
+    if (failedCount > 0) {
+      actionPlan.push({
+        priority: priority++,
+        action: `Review and address ${failedCount} failed checks on ${report.platform}`,
+        platform: report.platform,
+        impact: `Improve ${report.platform} health score from ${report.score} to 90+`,
+        effort: 'medium' as const,
+      });
+    }
+  }
+
+  return {
+    overallScore,
+    overallGrade,
+    platformReports,
+    topIssues,
+    actionPlan,
+  };
 }
 
-export function getGradeColor(grade: string): string {
-  switch (grade) {
-    case 'A':
-      return 'text-green-600';
-    case 'B':
-      return 'text-blue-600';
-    case 'C':
-      return 'text-yellow-600';
-    case 'D':
-      return 'text-orange-600';
-    case 'F':
-      return 'text-red-600';
-    default:
-      return 'text-gray-600';
-  }
-}
-
-export function getGradeBgColor(grade: string): string {
-  switch (grade) {
-    case 'A':
-      return 'bg-green-100';
-    case 'B':
-      return 'bg-blue-100';
-    case 'C':
-      return 'bg-yellow-100';
-    case 'D':
-      return 'bg-orange-100';
-    case 'F':
-      return 'bg-red-100';
-    default:
-      return 'bg-gray-100';
-  }
-}
-
-export function getSeverityColor(severity: string): string {
-  switch (severity) {
-    case 'critical':
-      return 'text-red-600 bg-red-50 border-red-200';
-    case 'high':
-      return 'text-orange-600 bg-orange-50 border-orange-200';
-    case 'medium':
-      return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    case 'low':
-      return 'text-blue-600 bg-blue-50 border-blue-200';
-    default:
-      return 'text-gray-600 bg-gray-50 border-gray-200';
-  }
-}
+// Re-export color functions for convenience
+export { getGradeColor, getGradeBgColor, getSeverityColor };
