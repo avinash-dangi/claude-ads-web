@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { PDFDownloadLink } from '@react-pdf/renderer';
 import { useAuditStore } from '@/store/audit-store';
 import { generateAuditReport, isQuestionnaireComplete } from '@/lib/utils/results-service';
+import { generatePDFReportData, generatePDFFilename } from '@/lib/utils/pdf-generator';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +21,7 @@ import {
   BarChart3,
   AlertCircle,
 } from 'lucide-react';
+import AuditReportPDF from '@/components/audit/results/AuditReportPDF';
 import ScoreCard from '@/components/audit/results/ScoreCard';
 import FindingsList from '@/components/audit/results/FindingsList';
 import ActionPlan from '@/components/audit/results/ActionPlan';
@@ -112,10 +115,7 @@ export default function ResultsPage() {
     totalChecks: report.platformReports.reduce((sum, p) => sum + p.results.length, 0),
   };
 
-  const handleExportPDF = () => {
-    // TODO: Implement PDF export
-    alert('PDF export coming soon!');
-  };
+  const pdfFilename = generatePDFFilename(formData.businessInfo?.name || 'Audit Report');
 
   const handleBackToAudit = () => {
     router.push('/audit');
@@ -135,10 +135,17 @@ export default function ResultsPage() {
                   : `Comprehensive analysis of ${report.platformReports.length} advertising platforms`}
               </p>
             </div>
-            <Button onClick={handleExportPDF} className="gap-2">
-              <Download className="w-4 h-4" />
-              Export PDF
-            </Button>
+            <PDFDownloadLink
+              document={<AuditReportPDF formData={formData} report={report} />}
+              fileName={pdfFilename}
+            >
+              {({ blob, url, loading, error }) => (
+                <Button disabled={loading} className="gap-2">
+                  <Download className="w-4 h-4" />
+                  {loading ? 'Generating...' : 'Export PDF'}
+                </Button>
+              )}
+            </PDFDownloadLink>
           </div>
 
           {/* Date */}
