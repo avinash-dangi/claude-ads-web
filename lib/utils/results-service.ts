@@ -2,6 +2,9 @@ import { Platform, AuditFormData } from '@/types/business';
 import { AuditResult, MultiPlatformAudit, AuditReport, CheckStatus } from '@/types/audit';
 import { googleAdsChecks, googleAdsCategories } from '@/data/checklists/google-ads';
 import { metaAdsChecks, metaAdsCategories } from '@/data/checklists/meta-ads';
+import { linkedinAdsChecks, linkedinAdsCategories } from '@/data/checklists/linkedin-ads';
+import { tiktokAdsChecks, tiktokAdsCategories } from '@/data/checklists/tiktok-ads';
+import { microsoftAdsChecks, microsoftAdsCategories } from '@/data/checklists/microsoft-ads';
 import {
   calculatePlatformHealthScore,
   calculateCategoryScore,
@@ -21,17 +24,17 @@ import { AuditCheck, AuditCategory } from '@/types/audit';
 const PLATFORM_CHECKS: Record<Platform, AuditCheck[]> = {
   'google-ads': googleAdsChecks,
   'meta-ads': metaAdsChecks,
-  'linkedin-ads': [],
-  'tiktok-ads': [],
-  'microsoft-ads': [],
+  'linkedin-ads': linkedinAdsChecks,
+  'tiktok-ads': tiktokAdsChecks,
+  'microsoft-ads': microsoftAdsChecks,
 };
 
 const PLATFORM_CATEGORIES: Record<Platform, AuditCategory[]> = {
   'google-ads': googleAdsCategories,
   'meta-ads': metaAdsCategories,
-  'linkedin-ads': [],
-  'tiktok-ads': [],
-  'microsoft-ads': [],
+  'linkedin-ads': linkedinAdsCategories,
+  'tiktok-ads': tiktokAdsCategories,
+  'microsoft-ads': microsoftAdsCategories,
 };
 
 interface GenerateReportOptions {

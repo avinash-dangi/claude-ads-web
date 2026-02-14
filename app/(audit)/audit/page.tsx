@@ -14,6 +14,9 @@ import QuestionnaireStep from '@/components/audit/QuestionnaireStep';
 import ReviewStep from '@/components/audit/ReviewStep';
 import { googleAdsChecks } from '@/data/checklists/google-ads';
 import { metaAdsChecks } from '@/data/checklists/meta-ads';
+import { linkedinAdsChecks } from '@/data/checklists/linkedin-ads';
+import { tiktokAdsChecks } from '@/data/checklists/tiktok-ads';
+import { microsoftAdsChecks } from '@/data/checklists/microsoft-ads';
 
 const STEPS = [
   { id: 1, name: 'Business Info', description: 'Tell us about your business' },
@@ -25,9 +28,9 @@ const STEPS = [
 const PLATFORM_CHECKS: Record<Platform, typeof googleAdsChecks> = {
   'google-ads': googleAdsChecks,
   'meta-ads': metaAdsChecks,
-  'linkedin-ads': [],
-  'tiktok-ads': [],
-  'microsoft-ads': [],
+  'linkedin-ads': linkedinAdsChecks,
+  'tiktok-ads': tiktokAdsChecks,
+  'microsoft-ads': microsoftAdsChecks,
 };
 
 export default function AuditPage() {
