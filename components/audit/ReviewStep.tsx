@@ -1,13 +1,13 @@
 'use client';
 
 import { useAuditStore } from '@/store/audit-store';
-import { BUSINESS_TYPES, PLATFORM_INFO } from '@/types/business';
+import { BUSINESS_TYPES, PLATFORM_INFO, Platform } from '@/types/business';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export default function ReviewStep() {
-  const { formData } = useAuditStore();
+  const { formData, getAuditResponses } = useAuditStore();
 
   const businessType = BUSINESS_TYPES.find((t) => t.value === formData.businessInfo?.type);
   const selectedPlatforms = formData.selectedPlatforms || [];
@@ -15,6 +15,18 @@ export default function ReviewStep() {
     const info = PLATFORM_INFO.find((p) => p.value === platform);
     return acc + (info?.checks || 0);
   }, 0);
+
+  const getPlatformStats = (platform: Platform) => {
+    const responses = getAuditResponses(platform);
+    const stats = {
+      total: responses.length,
+      pass: responses.filter((r) => r.status === 'pass').length,
+      warning: responses.filter((r) => r.status === 'warning').length,
+      fail: responses.filter((r) => r.status === 'fail').length,
+      notApplicable: responses.filter((r) => r.status === 'not-applicable').length,
+    };
+    return stats;
+  };
 
   return (
     <div className="space-y-6">
@@ -73,32 +85,52 @@ export default function ReviewStep() {
         </CardContent>
       </Card>
 
-      {/* Selected Platforms */}
+      {/* Selected Platforms with Response Summary */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Selected Platforms</CardTitle>
+          <CardTitle className="text-base">Selected Platforms & Responses</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {selectedPlatforms.map((platformValue) => {
               const platform = PLATFORM_INFO.find((p) => p.value === platformValue);
-              const accessMethod = formData.accountAccess?.[platformValue]?.accessMethod;
+              const stats = getPlatformStats(platformValue as Platform);
 
               return (
-                <div
-                  key={platformValue}
-                  className="flex items-center justify-between p-3 bg-blue-50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
+                <div key={platformValue} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="flex items-center gap-3 mb-2">
                     <span className="text-2xl">{platform?.icon}</span>
-                    <div>
+                    <div className="flex-1">
                       <div className="font-medium">{platform?.label}</div>
-                      <div className="text-xs text-slate-600">
-                        {platform?.checks} checks • {accessMethod || 'manual'} input
+                      <div className="text-xs text-slate-600">{platform?.checks} total checks</div>
+                    </div>
+                    {stats.total > 0 ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-yellow-600" />
+                    )}
+                  </div>
+
+                  {stats.total > 0 && (
+                    <div className="grid grid-cols-4 gap-2 text-xs mt-3 pt-3 border-t">
+                      <div className="text-center">
+                        <div className="font-semibold text-green-700">{stats.pass}</div>
+                        <div className="text-slate-600">Pass</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-yellow-700">{stats.warning}</div>
+                        <div className="text-slate-600">Warning</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-red-700">{stats.fail}</div>
+                        <div className="text-slate-600">Fail</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-slate-700">{stats.notApplicable}</div>
+                        <div className="text-slate-600">N/A</div>
                       </div>
                     </div>
-                  </div>
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  )}
                 </div>
               );
             })}

@@ -3,25 +3,42 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuditStore } from '@/store/audit-store';
+import { Platform } from '@/types/business';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import BusinessInfoStep from '@/components/audit/BusinessInfoStep';
 import PlatformSelectionStep from '@/components/audit/PlatformSelectionStep';
-import AccountAccessStep from '@/components/audit/AccountAccessStep';
+import QuestionnaireStep from '@/components/audit/QuestionnaireStep';
 import ReviewStep from '@/components/audit/ReviewStep';
+import { googleAdsChecks } from '@/data/checklists/google-ads';
+import { metaAdsChecks } from '@/data/checklists/meta-ads';
 
 const STEPS = [
   { id: 1, name: 'Business Info', description: 'Tell us about your business' },
   { id: 2, name: 'Select Platforms', description: 'Choose platforms to audit' },
-  { id: 3, name: 'Account Access', description: 'Provide account data' },
+  { id: 3, name: 'Audit Questionnaire', description: 'Answer questions about your accounts' },
   { id: 4, name: 'Review', description: 'Review and submit' },
 ];
 
+const PLATFORM_CHECKS: Record<Platform, typeof googleAdsChecks> = {
+  'google-ads': googleAdsChecks,
+  'meta-ads': metaAdsChecks,
+  'linkedin-ads': [],
+  'tiktok-ads': [],
+  'microsoft-ads': [],
+};
+
 export default function AuditPage() {
   const router = useRouter();
-  const { currentStep, setCurrentStep, formData } = useAuditStore();
+  const {
+    currentStep,
+    setCurrentStep,
+    formData,
+    currentPlatformForQuestionnaire,
+    setCurrentPlatformForQuestionnaire,
+  } = useAuditStore();
   const [isGenerating, setIsGenerating] = useState(false);
   const progress = (currentStep / STEPS.length) * 100;
 
@@ -32,22 +49,60 @@ export default function AuditPage() {
       case 2:
         return formData.selectedPlatforms && formData.selectedPlatforms.length > 0;
       case 3:
-        return true; // Account access is optional
+        // All platforms must have responses
+        return (
+          formData.selectedPlatforms &&
+          formData.selectedPlatforms.every(
+            (platform) =>
+              PLATFORM_CHECKS[platform as Platform].length === 0 ||
+              true // Questionnaire sets currentPlatformForQuestionnaire
+          )
+        );
       default:
         return true;
     }
   };
 
   const handleNext = () => {
+    if (currentStep === 2) {
+      // When leaving platform selection, start questionnaire with first platform
+      if (formData.selectedPlatforms && formData.selectedPlatforms.length > 0) {
+        setCurrentPlatformForQuestionnaire(formData.selectedPlatforms[0] as Platform);
+      }
+    }
     if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handleBack = () => {
+    if (currentStep === 3) {
+      setCurrentPlatformForQuestionnaire(null);
+    }
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  const handleQuestionnaireComplete = () => {
+    if (currentPlatformForQuestionnaire && formData.selectedPlatforms) {
+      const currentIndex = formData.selectedPlatforms.indexOf(currentPlatformForQuestionnaire);
+      if (currentIndex < formData.selectedPlatforms.length - 1) {
+        // Move to next platform
+        setCurrentPlatformForQuestionnaire(
+          formData.selectedPlatforms[currentIndex + 1] as Platform
+        );
+      } else {
+        // All platforms completed, move to review
+        setCurrentPlatformForQuestionnaire(null);
+        setCurrentStep(4);
+      }
+    }
+  };
+
+  const handleQuestionnaireCancel = () => {
+    setCurrentPlatformForQuestionnaire(null);
+    setCurrentStep(2); // Go back to platform selection
   };
 
   const handleGenerateReport = () => {
@@ -65,7 +120,18 @@ export default function AuditPage() {
       case 2:
         return <PlatformSelectionStep />;
       case 3:
-        return <AccountAccessStep />;
+        if (currentPlatformForQuestionnaire) {
+          const checks = PLATFORM_CHECKS[currentPlatformForQuestionnaire];
+          return (
+            <QuestionnaireStep
+              platform={currentPlatformForQuestionnaire}
+              checks={checks}
+              onComplete={handleQuestionnaireComplete}
+              onCancel={handleQuestionnaireCancel}
+            />
+          );
+        }
+        return null;
       case 4:
         return <ReviewStep />;
       default:
@@ -119,30 +185,32 @@ export default function AuditPage() {
           <CardContent>{renderStep()}</CardContent>
         </Card>
 
-        {/* Navigation */}
-        <div className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            disabled={currentStep === 1}
-            className="gap-2"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back
-          </Button>
+        {/* Navigation - only show for non-questionnaire steps */}
+        {currentStep !== 3 && (
+          <div className="flex justify-between">
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              disabled={currentStep === 1}
+              className="gap-2"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back
+            </Button>
 
-          {currentStep < STEPS.length ? (
-            <Button onClick={handleNext} disabled={!canProceed()} className="gap-2">
-              Next
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          ) : (
-            <Button onClick={handleGenerateReport} disabled={isGenerating} className="gap-2">
-              {isGenerating ? 'Generating...' : 'Generate Report'}
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
+            {currentStep < STEPS.length ? (
+              <Button onClick={handleNext} disabled={!canProceed()} className="gap-2">
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              <Button onClick={handleGenerateReport} disabled={isGenerating} className="gap-2">
+                {isGenerating ? 'Generating...' : 'Generate Report'}
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

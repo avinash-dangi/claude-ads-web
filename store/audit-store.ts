@@ -1,13 +1,20 @@
 import { create } from 'zustand';
 import { AuditFormData, Platform } from '@/types/business';
+import { AuditResult } from '@/types/audit';
 
 interface AuditStore {
   formData: Partial<AuditFormData>;
   currentStep: number;
+  currentPlatformForQuestionnaire: Platform | null;
+  auditResponses: Map<Platform, AuditResult[]>;
   setFormData: (data: Partial<AuditFormData>) => void;
   updateBusinessInfo: (info: Partial<AuditFormData['businessInfo']>) => void;
   togglePlatform: (platform: Platform) => void;
   setCurrentStep: (step: number) => void;
+  setCurrentPlatformForQuestionnaire: (platform: Platform | null) => void;
+  addAuditResponse: (platform: Platform, response: AuditResult) => void;
+  updateAuditResponse: (platform: Platform, checkId: string, response: Partial<AuditResult>) => void;
+  getAuditResponses: (platform: Platform) => AuditResult[];
   resetForm: () => void;
 }
 
@@ -20,9 +27,11 @@ const initialFormData: Partial<AuditFormData> = {
   accountAccess: {},
 };
 
-export const useAuditStore = create<AuditStore>((set) => ({
+export const useAuditStore = create<AuditStore>((set, get) => ({
   formData: initialFormData,
   currentStep: 1,
+  currentPlatformForQuestionnaire: null,
+  auditResponses: new Map(),
 
   setFormData: (data) =>
     set((state) => ({
@@ -59,5 +68,47 @@ export const useAuditStore = create<AuditStore>((set) => ({
 
   setCurrentStep: (step) => set({ currentStep: step }),
 
-  resetForm: () => set({ formData: initialFormData, currentStep: 1 }),
+  setCurrentPlatformForQuestionnaire: (platform) =>
+    set({ currentPlatformForQuestionnaire: platform }),
+
+  addAuditResponse: (platform, response) =>
+    set((state) => {
+      const newResponses = new Map(state.auditResponses);
+      const platformResponses = newResponses.get(platform) || [];
+      newResponses.set(platform, [...platformResponses, response]);
+      return { auditResponses: newResponses };
+    }),
+
+  updateAuditResponse: (platform, checkId, response) =>
+    set((state) => {
+      const newResponses = new Map(state.auditResponses);
+      const platformResponses = newResponses.get(platform) || [];
+      const index = platformResponses.findIndex((r) => r.checkId === checkId);
+      if (index >= 0) {
+        platformResponses[index] = { ...platformResponses[index], ...response };
+        newResponses.set(platform, platformResponses);
+      } else {
+        const newResponse: AuditResult = {
+          checkId,
+          status: response.status || 'pass',
+          notes: response.notes,
+          impact: response.impact,
+        };
+        newResponses.set(platform, [...platformResponses, newResponse]);
+      }
+      return { auditResponses: newResponses };
+    }),
+
+  getAuditResponses: (platform) => {
+    const state = get();
+    return state.auditResponses.get(platform) || [];
+  },
+
+  resetForm: () =>
+    set({
+      formData: initialFormData,
+      currentStep: 1,
+      currentPlatformForQuestionnaire: null,
+      auditResponses: new Map(),
+    }),
 }));
