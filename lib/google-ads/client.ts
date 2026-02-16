@@ -1,4 +1,3 @@
-
 import { createClient } from '@/lib/supabase/server';
 
 interface GoogleTokens {
@@ -10,6 +9,8 @@ interface GoogleTokens {
 export async function getGoogleAdsTokens(userId: string): Promise<string | null> {
     const supabase = await createClient();
 
+    if (!supabase) return null;
+
     const { data, error } = await supabase
         .from('integrations')
         .select('*')
@@ -19,7 +20,6 @@ export async function getGoogleAdsTokens(userId: string): Promise<string | null>
 
     if (error || !data) return null;
 
-    // Check if access token is expired
     if (Date.now() > data.expires_at) {
         return await refreshAccessToken(userId, data.refresh_token);
     }
@@ -46,7 +46,8 @@ async function refreshAccessToken(userId: string, refreshToken: string): Promise
 
         const supabase = await createClient();
 
-        // Update DB with new access token
+        if (!supabase) return null;
+
         await supabase
             .from('integrations')
             .update({

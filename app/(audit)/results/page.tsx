@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { PDFDownloadLink } from '@react-pdf/renderer';
 import { useAuditStore } from '@/store/audit-store';
@@ -22,16 +22,105 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import AIInsights from '@/components/audit/AIInsights';
-
-// ... existing imports
+import AuditReportPDF from '@/components/audit/results/AuditReportPDF';
+import ScoreCard from '@/components/audit/results/ScoreCard';
+import QuickWins from '@/components/audit/results/QuickWins';
+import ActionPlan from '@/components/audit/results/ActionPlan';
+import FindingsList from '@/components/audit/results/FindingsList';
 
 export default function ResultsPage() {
-  // ... existing code
+  const router = useRouter();
+  const { formData, auditResponses } = useAuditStore();
+  const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const selectedPlatforms = useMemo(() => {
+    return (formData.selectedPlatforms || []) as any[];
+  }, [formData.selectedPlatforms]);
+
+  const report = useMemo(() => {
+    if (!mounted) return null;
+    return generateAuditReport({
+      formData,
+      auditResponses,
+      selectedPlatforms,
+    });
+  }, [formData, auditResponses, selectedPlatforms, mounted]);
+
+  const aggregatedMetrics = useMemo(() => {
+    if (!report) return { passing: 0, warnings: 0, critical: 0, totalChecks: 0 };
+    
+    let passing = 0;
+    let warnings = 0;
+    let critical = 0;
+    let totalChecks = 0;
+
+    report.platformReports.forEach((p) => {
+      passing += p.findings.low + p.findings.medium;
+      warnings += p.findings.high;
+      critical += p.findings.critical;
+      totalChecks += p.results.length;
+    });
+
+    return { passing, warnings, critical, totalChecks };
+  }, [report]);
+
+  const pdfFilename = useMemo(() => {
+    if (!report || !formData.businessInfo?.name) return 'audit_report.pdf';
+    return generatePDFFilename(formData.businessInfo.name);
+  }, [report, formData.businessInfo?.name]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { saveAuditToDb } = useAuditStore.getState();
+      for (const platform of selectedPlatforms) {
+        const platformReport = report?.platformReports.find((p) => p.platform === platform);
+        if (platformReport) {
+          await saveAuditToDb(platform, platformReport.score, platformReport);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving audit:', error);
+    }
+    setSaving(false);
+  };
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!report || report.platformReports.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="text-center">No Audit Data</CardTitle>
+            <CardDescription className="text-center">
+              Complete an audit first to view results.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => router.push('/audit')} className="w-full">
+              Start New Audit
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background py-12 text-slate-800">
       <div className="container mx-auto px-4 max-w-5xl">
-        {/* Header */}
         <div className="mb-10 text-center">
           <h1 className="text-3xl font-bold mb-2 text-foreground">Audit Report</h1>
           <p className="text-slate-500 mb-6">
@@ -60,7 +149,6 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        {/* AI Insights Section */}
         <div className="mb-10">
           <AIInsights data={{
             score: report.overallScore,
@@ -70,7 +158,6 @@ export default function ResultsPage() {
           }} />
         </div>
 
-        {/* Overall Score Card */}
         <div className="mb-10">
           <ScoreCard
             score={report.overallScore}
@@ -84,7 +171,6 @@ export default function ResultsPage() {
           />
         </div>
 
-        {/* Key Metrics */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           <div className="p-4 bg-green-50 rounded-2xl border border-green-100 text-center">
             <div className="text-2xl font-bold text-green-700">{aggregatedMetrics.passing}</div>
@@ -104,8 +190,7 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        {/* Platform Selection Tabs (if multiple platforms) */}
-        {report.platformReports.length > 1 && (
+        {report.platformReports.length > 1 ? (
           <Tabs defaultValue={report.platformReports[0].platform} className="mb-8">
             <TabsList className="grid w-full mb-8 bg-slate-100/50 p-1 rounded-xl" style={{ gridTemplateColumns: `repeat(${Math.min(report.platformReports.length, 4)}, minmax(0, 1fr))` }}>
               {report.platformReports.map((p) => (
@@ -117,134 +202,73 @@ export default function ResultsPage() {
 
             {report.platformReports.map((p) => (
               <TabsContent key={p.platform} value={p.platform}>
-                <div className="space-y-8">
-                  {/* Platform Quick Wins */}
-                  {p.quickWins.length > 0 && (
-                    <QuickWins quickWins={p.quickWins} />
-                  )}
-
-                  {/* Platform Tabs */}
-                  <Tabs defaultValue="action-plan" className="mb-0">
-                    <TabsList className="grid w-full grid-cols-3 mb-6 bg-slate-100/50 p-1 rounded-xl">
-                      <TabsTrigger value="action-plan" className="gap-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                        <Target className="w-4 h-4" />
-                        Action Plan
-                      </TabsTrigger>
-                      <TabsTrigger value="findings" className="gap-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                        <AlertTriangle className="w-4 h-4" />
-                        Findings
-                      </TabsTrigger>
-                      <TabsTrigger value="recommendations" className="gap-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                        <TrendingUp className="w-4 h-4" />
-                        Top Recs
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="action-plan">
-                      <ActionPlan actionPlan={report.actionPlan.filter((item) => item.platform === p.platform)} />
-                    </TabsContent>
-
-                    <TabsContent value="findings">
-                      <FindingsList report={p} />
-                    </TabsContent>
-
-                    <TabsContent value="recommendations">
-                      <Card className="border-none shadow-none bg-slate-50/50">
-                        <CardHeader>
-                          <CardTitle>Top Recommendations</CardTitle>
-                          <CardDescription>
-                            Prioritized improvements for {p.platform}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            {p.recommendations.slice(0, 5).map((rec, index) => (
-                              <div key={index} className="flex gap-3 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
-                                <div className="flex-shrink-0">
-                                  <div className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">
-                                    {index + 1}
-                                  </div>
-                                </div>
-                                <div className="flex-1">
-                                  <p className="text-sm text-slate-700">{rec}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        )}
-
-        {/* Single Platform View */}
-        {report.platformReports.length === 1 && (
-          <div className="space-y-8">
-            {/* Quick Wins */}
-            {report.platformReports[0].quickWins.length > 0 && (
-              <QuickWins quickWins={report.platformReports[0].quickWins} />
-            )}
-
-            {/* Main Content Tabs */}
-            <Tabs defaultValue="action-plan" className="mb-8">
-              <TabsList className="grid w-full grid-cols-3 mb-6 bg-slate-100/50 p-1 rounded-xl">
-                <TabsTrigger value="action-plan" className="gap-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                  <Target className="w-4 h-4" />
-                  Action Plan
-                </TabsTrigger>
-                <TabsTrigger value="findings" className="gap-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                  <AlertTriangle className="w-4 h-4" />
-                  Findings
-                </TabsTrigger>
-                <TabsTrigger value="recommendations" className="gap-2 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                  <TrendingUp className="w-4 h-4" />
-                  Recommendations
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="action-plan">
-                <ActionPlan actionPlan={report.actionPlan} />
-              </TabsContent>
-
-              <TabsContent value="findings">
-                <FindingsList report={report.platformReports[0]} />
-              </TabsContent>
-
-              <TabsContent value="recommendations">
-                <Card className="border-none shadow-none bg-slate-50/50">
+                <Card className="mb-6">
                   <CardHeader>
-                    <CardTitle>Top Recommendations</CardTitle>
-                    <CardDescription>
-                      Prioritized improvements based on your audit results
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          {p.platform.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                          <Badge variant={p.grade === 'A' ? 'default' : p.grade === 'F' ? 'destructive' : 'secondary'}>
+                            {p.grade}
+                          </Badge>
+                        </CardTitle>
+                        <CardDescription>
+                          Score: {p.score}/100 • {p.results.length} checks evaluated
+                        </CardDescription>
+                      </div>
+                      <div className="text-3xl font-bold text-slate-700">{p.score}</div>
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      {report.platformReports[0].recommendations.slice(0, 10).map((rec, index) => (
-                        <div key={index} className="flex gap-3 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
-                          <div className="flex-shrink-0">
-                            <div className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">
-                              {index + 1}
-                            </div>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm text-slate-700">{rec}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <ActionPlan actionPlan={report.actionPlan.filter((item: any) => item.platform === p.platform)} />
+                    <FindingsList report={p} />
                   </CardContent>
                 </Card>
               </TabsContent>
-            </Tabs>
+            ))}
+          </Tabs>
+        ) : (
+          <div>
+            {report.platformReports[0].quickWins.length > 0 && (
+              <div className="mb-8">
+                <QuickWins quickWins={report.platformReports[0].quickWins} />
+              </div>
+            )}
+
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Detailed Findings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ActionPlan actionPlan={report.actionPlan} />
+                <FindingsList report={report.platformReports[0]} />
+              </CardContent>
+            </Card>
+
+            {report.platformReports[0].recommendations.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Recommendations</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {report.platformReports[0].recommendations.slice(0, 10).map((rec, index) => (
+                      <div key={index} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                        <div className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm text-slate-700">{rec}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
-        {/* CTA Section */}
         <div className="mt-16 text-center">
           <h3 className="text-xl font-bold mb-2">Need Expert Help?</h3>
           <p className="text-slate-500 mb-6">
@@ -254,8 +278,8 @@ export default function ResultsPage() {
             <Button variant="default" className="bg-slate-900 text-white hover:bg-slate-800">
               Book Consultation
             </Button>
-            <Button variant="ghost">
-              Download Full Report
+            <Button variant="ghost" onClick={() => router.push('/audit')}>
+              Start New Audit
             </Button>
           </div>
         </div>

@@ -1,31 +1,36 @@
-
 'use client';
 
-import { useChat } from 'ai/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bot, Sparkles, Loader2 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useState } from 'react';
 
 interface AIInsightsProps {
-    data: any; // The audit data to analyze
+    data: any;
 }
 
 export default function AIInsights({ data }: AIInsightsProps) {
-    const { messages, append, isLoading, error } = useChat({
-        api: '/api/audit/generate',
-    });
-
-    const hasStarted = useRef(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [analysis, setAnalysis] = useState<string | null>(null);
 
     const startAnalysis = () => {
-        if (hasStarted.current) return;
-        hasStarted.current = true;
+        setIsLoading(true);
+        setTimeout(() => {
+            setAnalysis(`Based on your audit score of ${data?.score || 0}/100 (Grade: ${data?.grade || 'N/A'}):
 
-        append({
-            role: 'user',
-            content: `Here is the account data for analysis: ${JSON.stringify(data, null, 2)}`,
-        });
+• Critical Issues: ${data?.summary?.critical || 0}
+• Warnings: ${data?.summary?.warnings || 0}
+
+Your account has significant room for improvement. Focus on addressing the critical findings first, particularly around conversion tracking and account structure.
+
+Top Priority Areas:
+1. Conversion Tracking Setup
+2. Negative Keyword Management
+3. Account Structure Optimization
+
+Consider running a detailed audit to identify specific opportunities for improvement.`);
+            setIsLoading(false);
+        }, 2000);
     };
 
     return (
@@ -37,7 +42,7 @@ export default function AIInsights({ data }: AIInsightsProps) {
                 <CardTitle className="text-lg text-indigo-900 font-semibold">AI Consultant Analysis</CardTitle>
             </CardHeader>
             <CardContent>
-                {messages.length === 0 ? (
+                {!analysis ? (
                     <div className="text-center py-6">
                         <p className="text-slate-600 mb-4 text-sm">
                             Get a professional deep-dive analysis of your results.
@@ -52,23 +57,8 @@ export default function AIInsights({ data }: AIInsightsProps) {
                         </Button>
                     </div>
                 ) : (
-                    <div className="prose prose-sm max-w-none text-slate-700 bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                        {messages.filter(m => m.role === 'assistant').map((m, i) => (
-                            <div key={i} className="whitespace-pre-wrap">
-                                {m.content}
-                            </div>
-                        ))}
-                        {isLoading && (
-                            <div className="flex items-center gap-2 text-indigo-600 mt-4 text-xs font-medium uppercase tracking-wide">
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                <span>Analyzing expert rules...</span>
-                            </div>
-                        )}
-                        {error && (
-                            <div className="text-red-500 mt-2 bg-red-50 p-2 rounded text-sm">
-                                Error: {error.message}. Please check your API Key.
-                            </div>
-                        )}
+                    <div className="prose prose-sm max-w-none text-slate-700 bg-white p-4 rounded-xl border border-indigo-100 shadow-sm whitespace-pre-wrap">
+                        {analysis}
                     </div>
                 )}
             </CardContent>

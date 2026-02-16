@@ -1,9 +1,0 @@
-{
-    "env": {
-        "CLAUDE_CODE_USE_BEDROCK": "1",
-        "AWS_REGION": "us-west-1",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": "arn:aws:bedrock:us-west-1:456318992606:application-inference-profile/jx7im42jr5l9",
-        "ANTHROPIC_DEFAULT_SONNET_MODEL": "arn:aws:bedrock:us-west-1:456318992606:application-inference-profile/7qgw2twnt3j8",
-        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "arn:aws:bedrock:us-west-1:456318992606:application-inference-profile/jbfzvfd63agg"
-    }
-}

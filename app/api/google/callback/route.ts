@@ -1,11 +1,10 @@
-
 import { type NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
-    const state = searchParams.get('state'); // Should be user_id
+    const state = searchParams.get('state');
     const error = searchParams.get('error');
 
     if (error) {
@@ -17,15 +16,17 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = await createClient();
+    
+    if (!supabase) {
+        return NextResponse.redirect(new URL('/settings/integrations?error=supabase_not_configured', request.url));
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user || user.id !== state) {
-        // Security check: ensure the user initiating the request is the one receiving the callback
-        // Or at least that the text matches.
-        // For now, we trust the session.
+        return NextResponse.redirect(new URL('/settings/integrations?error=unauthorized', request.url));
     }
 
-    // Exchange code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: {
@@ -47,22 +48,17 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL('/settings/integrations?error=token_exchange_failed', request.url));
     }
 
-    // Store tokens in Supabase
-    // In a real app, ENCRYPT the refresh_token before storing.
-    // We'll store it raw for this MVP but mark it as sensitive.
-
     const { error: dbError } = await supabase
         .from('integrations')
         .upsert({
             user_id: user?.id,
             provider: 'google_ads',
-            refresh_token: tokens.refresh_token, // Only returned if access_type=offline & prompt=consent
+            refresh_token: tokens.refresh_token,
             access_token: tokens.access_token,
             expires_at: Date.now() + (tokens.expires_in * 1000),
             status: 'active',
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toLocaleDateString()
         }, { onConflict: 'user_id, provider' });
-
 
     if (dbError) {
         console.error('Database error', dbError);

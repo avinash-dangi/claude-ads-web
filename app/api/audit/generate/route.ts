@@ -38,5 +38,5 @@ export async function POST(req: Request) {
         // but for simple text generation, appending it to the user message is easiest.
     });
 
-    return result.toDataStreamResponse();
+    return result.toTextStreamResponse();
 }

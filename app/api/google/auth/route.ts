@@ -1,9 +1,13 @@
-
 import { type NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
     const supabase = await createClient();
+    
+    if (!supabase) {
+        return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -18,15 +22,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Google Client ID not configured' }, { status: 500 });
     }
 
-    // Construct the Google Authorization URL
     const params = new URLSearchParams({
         client_id: clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
         scope: scope,
-        access_type: 'offline', // Important: to get a refresh token
-        prompt: 'consent', // Force consent prompt to ensure we get a refresh token
-        state: user.id // Pass user ID as state to verify on callback
+        access_type: 'offline',
+        prompt: 'consent',
+        state: user.id
     });
 
     const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
