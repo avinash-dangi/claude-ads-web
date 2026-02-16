@@ -9,7 +9,6 @@ export async function middleware(request: NextRequest) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    // Skip Supabase auth if credentials not configured
     if (!url || !key) {
         return supabaseResponse;
     }
@@ -37,7 +36,25 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const { pathname } = request.nextUrl
+
+    const protectedRoutes = ['/dashboard']
+    const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
+    
+    const authRoutes = ['/login', '/signup']
+    const isAuthRoute = authRoutes.includes(pathname)
+
+    if (isProtectedRoute && !user) {
+        const url = new URL('/login', request.url)
+        url.searchParams.set('redirect', pathname)
+        return NextResponse.redirect(url)
+    }
+
+    if (isAuthRoute && user) {
+        return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
 
     return supabaseResponse
 }

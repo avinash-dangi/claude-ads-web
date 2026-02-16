@@ -114,7 +114,6 @@ export const useAuditStore = create<AuditStore>((set, get) => ({
     }),
 
   saveAuditToDb: async (platform: Platform, score: number, data: any) => {
-    // Dynamically import to avoid SSR issues with client-side only modules if needed
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
 
@@ -122,10 +121,13 @@ export const useAuditStore = create<AuditStore>((set, get) => ({
 
     if (!user) return { error: 'User not authenticated' };
 
+    const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
+
     const { error } = await supabase.from('audits').insert({
       user_id: user.id,
       platform,
       score,
+      grade,
       data,
       project_name: get().formData.businessInfo?.name || 'Untitled Audit',
     });
