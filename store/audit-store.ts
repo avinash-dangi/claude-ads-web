@@ -16,6 +16,7 @@ interface AuditStore {
   updateAuditResponse: (platform: Platform, checkId: string, response: Partial<AuditResult>) => void;
   getAuditResponses: (platform: Platform) => AuditResult[];
   resetForm: () => void;
+  saveAuditToDb: (platform: Platform, score: number, data: any) => Promise<{ error: any }>;
 }
 
 const initialFormData: Partial<AuditFormData> = {
@@ -111,4 +112,24 @@ export const useAuditStore = create<AuditStore>((set, get) => ({
       currentPlatformForQuestionnaire: null,
       auditResponses: new Map(),
     }),
+
+  saveAuditToDb: async (platform: Platform, score: number, data: any) => {
+    // Dynamically import to avoid SSR issues with client-side only modules if needed
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) return { error: 'User not authenticated' };
+
+    const { error } = await supabase.from('audits').insert({
+      user_id: user.id,
+      platform,
+      score,
+      data,
+      project_name: get().formData.businessInfo?.name || 'Untitled Audit',
+    });
+
+    return { error };
+  },
 }));

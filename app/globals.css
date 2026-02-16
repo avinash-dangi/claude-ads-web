@@ -1,26 +1,35 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #0a0f1a;
+  --color-background: #faf9f6; /* Off-white / Cream */
+  --color-foreground: #1e1b4b; /* Deep Indigo for text */
+  
   --color-card: #ffffff;
-  --color-card-foreground: #0a0f1a;
+  --color-card-foreground: #1e1b4b;
+  
   --color-popover: #ffffff;
-  --color-popover-foreground: #0a0f1a;
-  --color-primary: #1e3a8a;
-  --color-primary-foreground: #f9fafb;
-  --color-secondary: #f3f4f6;
-  --color-secondary-foreground: #1e3a8a;
-  --color-muted: #f3f4f6;
-  --color-muted-foreground: #6b7280;
-  --color-accent: #f3f4f6;
-  --color-accent-foreground: #1e3a8a;
-  --color-destructive: #ef4444;
-  --color-destructive-foreground: #f9fafb;
-  --color-border: #e5e7eb;
-  --color-input: #e5e7eb;
-  --color-ring: #0a0f1a;
-  --radius: 0.5rem;
+  --color-popover-foreground: #1e1b4b;
+  
+  --color-primary: #6366f1; /* Soft Indigo */
+  --color-primary-foreground: #ffffff;
+  
+  --color-secondary: #e0e7ff; /* Very pale indigo */
+  --color-secondary-foreground: #3730a3;
+  
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  
+  --color-accent: #f0fdf4; /* Pastel Green tint */
+  --color-accent-foreground: #166534;
+  
+  --color-destructive: #fecdd3; /* Pastel Red */
+  --color-destructive-foreground: #881337;
+
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #6366f1;
+  
+  --radius: 1rem; /* More rounded */
 }
 
 * {
