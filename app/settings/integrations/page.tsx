@@ -1,10 +1,17 @@
 
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
 import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
+
+interface Integration {
+    provider: string
+    status: string
+    expires_at: number
+}
 
 interface IntegrationCardProps {
     title: string
@@ -38,10 +45,7 @@ function IntegrationCard({
         } catch (error) {
             console.error('Integration action failed:', error)
         } finally {
-            // Keep loading true if we're redirecting to prevent multi-clicks
-            if (!isConnected) {
-                // for connect actions that redirect, we might not want to stop loading
-            } else {
+            if (isConnected) {
                 setLoading(false)
             }
         }
@@ -73,6 +77,7 @@ function IntegrationCard({
                 variant={isConnected ? "outline" : "default"}
                 onClick={handleAction}
                 disabled={loading}
+                className={isConnected ? "" : "bg-blue-600 hover:bg-blue-700"}
             >
                 {loading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -87,19 +92,64 @@ function IntegrationCard({
 }
 
 export default function IntegrationsPage() {
-    const [integrations, setIntegrations] = useState<{ google_ads: boolean }>({ google_ads: false })
-    const supabase = createClient()
+    const [integrations, setIntegrations] = useState<Record<string, boolean>>({})
+    const [loading, setLoading] = useState(true)
 
-    // In a real app, fetch initial state from DB
+    useEffect(() => {
+        loadIntegrations()
+    }, [])
+
+    const loadIntegrations = async () => {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (!user) {
+            setLoading(false)
+            return
+        }
+
+        const { data } = await supabase
+            .from('integrations')
+            .select('provider, status')
+            .eq('user_id', user.id)
+
+        const statusMap: Record<string, boolean> = {}
+        if (data) {
+            data.forEach((integration: any) => {
+                statusMap[integration.provider] = integration.status === 'active'
+            })
+        }
+        setIntegrations(statusMap)
+        setLoading(false)
+    }
 
     const handleGoogleConnect = () => {
-        // Redirect to our API route that starts the Google OAuth flow
         window.location.href = '/api/google/auth'
     }
 
     const handleGoogleDisconnect = async () => {
-        // Call API to remove integration
-        alert('Disconnect logic to be implemented')
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (!user) return
+
+        await supabase
+            .from('integrations')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('provider', 'google_ads')
+
+        setIntegrations({ ...integrations, google_ads: false })
+    }
+
+    if (loading) {
+        return (
+            <div className="container mx-auto px-4 py-12 max-w-4xl">
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -113,7 +163,7 @@ export default function IntegrationsPage() {
                     description="Import campaigns, ad groups, and performance metrics directly from Google."
                     icon="🔍"
                     provider="google_ads"
-                    isConnected={integrations.google_ads}
+                    isConnected={!!integrations.google_ads}
                     onConnect={handleGoogleConnect}
                     onDisconnect={handleGoogleDisconnect}
                 />
@@ -123,10 +173,20 @@ export default function IntegrationsPage() {
                     description="Connect Facebook and Instagram ad accounts for automated auditing."
                     icon="📱"
                     provider="meta_ads"
-                    isConnected={false}
+                    isConnected={!!integrations.meta_ads}
                     onConnect={() => alert('Meta integration coming soon')}
                     onDisconnect={() => { }}
                 />
+            </div>
+
+            <div className="mt-8 p-4 bg-blue-50 rounded-lg">
+                <h3 className="font-semibold text-blue-900 mb-2">Why connect your accounts?</h3>
+                <ul className="text-sm text-blue-800 space-y-1">
+                    <li>• Automatic data import - no manual entry required</li>
+                    <li>• Real-time performance metrics</li>
+                    <li>• One-click audits with pre-filled data</li>
+                    <li>• Track improvements over time</li>
+                </ul>
             </div>
         </div>
     )
