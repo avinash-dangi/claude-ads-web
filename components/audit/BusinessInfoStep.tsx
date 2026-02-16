@@ -1,16 +1,137 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useAuditStore } from '@/store/audit-store';
 import { BUSINESS_TYPES } from '@/types/business';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { createClient } from '@/lib/supabase/client';
+import { Plus, FolderOpen, Save } from 'lucide-react';
+
+interface Project {
+  id: string;
+  name: string;
+  website: string;
+}
 
 export default function BusinessInfoStep() {
-  const { formData, updateBusinessInfo } = useAuditStore();
+  const { formData, updateBusinessInfo, setCurrentProjectId, saveDraft } = useAuditStore();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('projects')
+      .select('id, name, website')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (data) setProjects(data);
+  };
+
+  const handleSaveDraft = async () => {
+    setSaving(true);
+    const result = await saveDraft();
+    setSaving(false);
+    if (!result.error) {
+      alert('Draft saved successfully!');
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return;
+    
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('projects')
+      .insert({
+        user_id: user.id,
+        name: newProjectName,
+        website: formData.businessInfo?.website || '',
+        business_type: formData.businessInfo?.type || 'generic',
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setCurrentProjectId(data.id);
+      setProjects([data, ...projects]);
+      setShowNewProject(false);
+      setNewProjectName('');
+    }
+  };
+
+  const handleSelectProject = (projectId: string | null) => {
+    setCurrentProjectId(projectId);
+  };
 
   return (
     <div className="space-y-6">
+      {/* Project Selection */}
+      <div className="space-y-2">
+        <Label>Project</Label>
+        <div className="flex gap-2">
+          <select
+            className="flex-1 p-2 border rounded-md bg-white"
+            value={useAuditStore.getState().currentProjectId || ''}
+            onChange={(e) => handleSelectProject(e.target.value || null)}
+          >
+            <option value="">New Audit</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setShowNewProject(!showNewProject)}
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+        
+        {showNewProject && (
+          <div className="flex gap-2 mt-2">
+            <Input
+              placeholder="New project name"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+            />
+            <Button onClick={handleCreateProject}>Create</Button>
+          </div>
+        )}
+      </div>
+
+      {/* Save Draft Button */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          onClick={handleSaveDraft}
+          disabled={saving}
+          className="gap-2"
+        >
+          <Save className="w-4 h-4" />
+          {saving ? 'Saving...' : 'Save Draft'}
+        </Button>
+      </div>
+
       {/* Business Name */}
       <div className="space-y-2">
         <Label htmlFor="businessName">Business Name *</Label>
@@ -48,50 +169,17 @@ export default function BusinessInfoStep() {
               }`}
               onClick={() => updateBusinessInfo({ type: type.value })}
             >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{type.icon}</span>
-                  <div className="flex-1">
-                    <div className="font-semibold mb-1">{type.label}</div>
-                    <CardDescription className="text-xs">{type.description}</CardDescription>
-                  </div>
+              <CardContent className="p-4 flex items-center gap-3">
+                <span className="text-2xl">{type.icon}</span>
+                <div>
+                  <CardDescription className="font-medium text-slate-900">
+                    {type.label}
+                  </CardDescription>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-      </div>
-
-      {/* Monthly Budget */}
-      <div className="space-y-2">
-        <Label htmlFor="budget">Monthly Ad Budget (Optional)</Label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-          <Input
-            id="budget"
-            type="number"
-            placeholder="5000"
-            className="pl-7"
-            value={formData.businessInfo?.monthlyBudget || ''}
-            onChange={(e) =>
-              updateBusinessInfo({ monthlyBudget: parseFloat(e.target.value) || undefined })
-            }
-          />
-        </div>
-        <p className="text-xs text-slate-500">
-          Total monthly spend across all platforms (helps us provide better recommendations)
-        </p>
-      </div>
-
-      {/* Primary Goal */}
-      <div className="space-y-2">
-        <Label htmlFor="goal">Primary Goal (Optional)</Label>
-        <Input
-          id="goal"
-          placeholder="e.g., Increase conversions, Lower CPA, Improve ROAS"
-          value={formData.businessInfo?.primaryGoal || ''}
-          onChange={(e) => updateBusinessInfo({ primaryGoal: e.target.value })}
-        />
       </div>
     </div>
   );
