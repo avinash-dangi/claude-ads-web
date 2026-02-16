@@ -33,10 +33,34 @@ export default function ResultsPage() {
   const { formData, auditResponses } = useAuditStore();
   const [saving, setSaving] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [branding, setBranding] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
+    loadBranding();
   }, []);
+
+  const loadBranding = async () => {
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const { data } = await supabase
+          .from('user_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (data) {
+          setBranding(data);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading branding:', error);
+    }
+  };
 
   const selectedPlatforms = useMemo(() => {
     return (formData.selectedPlatforms || []) as any[];
@@ -136,7 +160,7 @@ export default function ResultsPage() {
               {saving ? 'Saving...' : 'Save Report'}
             </Button>
             <PDFDownloadLink
-              document={<AuditReportPDF formData={formData} report={report} />}
+              document={<AuditReportPDF formData={formData} report={report} branding={branding} />}
               fileName={pdfFilename}
             >
               {({ blob, url, loading, error }) => (

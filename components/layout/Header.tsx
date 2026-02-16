@@ -87,9 +87,15 @@ export function Header() {
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem asChild>
-                                    <Link href="/profile" className="cursor-pointer">
+                                    <Link href="/settings/branding" className="cursor-pointer">
                                         <UserIcon className="mr-2 h-4 w-4" />
-                                        Profile
+                                        Branding
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/settings/integrations" className="cursor-pointer">
+                                        <UserIcon className="mr-2 h-4 w-4" />
+                                        Integrations
                                     </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
